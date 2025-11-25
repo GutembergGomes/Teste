@@ -1502,6 +1502,7 @@
         // Configuração do Supabase
         const SUPABASE_URL = 'https://orryqrjtzsvsvahsczse.supabase.co'; // Substitua pela sua URL
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ycnlxcmp0enN2c3ZhaHNjenNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NTYxNjEsImV4cCI6MjA3OTUzMjE2MX0.4Z0Np0DkRvO1vOowihV_La5xSIbZttaJOxY7kMOmfgI'; // Substitua pela sua chave
+        const INSPECTION_PHOTOS_BUCKET = 'inspection-photos';
         
         // Inicializar cliente Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1514,6 +1515,7 @@
         let realtimeChannel = null;
         let pollingTimer = null;
         let currentInspectionId = null;
+        let currentPhotoSessionId = null;
         let savingInspection = false;
         let syncingInspections = false;
         function isOnline() { return navigator.onLine; }
@@ -3395,6 +3397,7 @@
             let index = 0;
             const isMobile = window.innerWidth < 640;
             let sectionCount = 0;
+            currentPhotoSessionId = (crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
             if (config && Array.isArray(config.sections)) {
                 config.sections.forEach(section => {
                     const sectionDiv = document.createElement('div');
@@ -3463,21 +3466,54 @@
             if (el.classList.contains('hidden')) el.classList.remove('hidden'); else el.classList.add('hidden');
         }
 
-        function handleItemPhoto(itemId, fileList) {
+        async function handleItemPhoto(itemId, fileList) {
             if (!fileList || fileList.length === 0) return;
             const files = Array.from(fileList).slice(0, 6);
-            let pending = files.length;
-            files.forEach(f => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const url = String(reader.result || '');
-                    if (!Array.isArray(currentInspection.items[itemId].photos)) currentInspection.items[itemId].photos = [];
-                    currentInspection.items[itemId].photos.push(url);
-                    renderItemPhotos(itemId);
-                };
-                reader.onloadend = () => { pending--; };
-                reader.readAsDataURL(f);
-            });
+            for (const f of files) {
+                try {
+                    const canUpload = isOnline() && currentUser && currentUser.id && INSPECTION_PHOTOS_BUCKET;
+                    if (canUpload) {
+                        const safeName = (f.name || 'foto').replace(/[^A-Za-z0-9._-]/g, '_');
+                        const key = `${currentPhotoSessionId}/${itemId}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+                        const up = await supabase.storage.from(INSPECTION_PHOTOS_BUCKET).upload(key, f, { contentType: f.type || 'image/jpeg', upsert: true });
+                        if (up && !up.error) {
+                            const pub = supabase.storage.from(INSPECTION_PHOTOS_BUCKET).getPublicUrl(key);
+                            const url = String((pub && pub.data && pub.data.publicUrl) || '');
+                            if (url) {
+                                if (!Array.isArray(currentInspection.items[itemId].photos)) currentInspection.items[itemId].photos = [];
+                                currentInspection.items[itemId].photos.push(url);
+                                renderItemPhotos(itemId);
+                                continue;
+                            }
+                        }
+                    }
+                    const reader = new FileReader();
+                    await new Promise((resolve) => {
+                        reader.onload = () => {
+                            const url = String(reader.result || '');
+                            if (!Array.isArray(currentInspection.items[itemId].photos)) currentInspection.items[itemId].photos = [];
+                            currentInspection.items[itemId].photos.push(url);
+                            renderItemPhotos(itemId);
+                            resolve();
+                        };
+                        reader.readAsDataURL(f);
+                    });
+                } catch (_) {
+                    try {
+                        const reader2 = new FileReader();
+                        await new Promise((resolve) => {
+                            reader2.onload = () => {
+                                const url2 = String(reader2.result || '');
+                                if (!Array.isArray(currentInspection.items[itemId].photos)) currentInspection.items[itemId].photos = [];
+                                currentInspection.items[itemId].photos.push(url2);
+                                renderItemPhotos(itemId);
+                                resolve();
+                            };
+                            reader2.readAsDataURL(f);
+                        });
+                    } catch (_) {}
+                }
+            }
             const pi = document.getElementById(`photo_input_${itemId}`);
             if (pi) pi.value = '';
         }
