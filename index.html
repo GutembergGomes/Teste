@@ -453,6 +453,9 @@
                         <button onclick="showSection('equipamentos')" class="nav-btn border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 px-1 py-4 text-sm font-medium">
                             Equipamentos
                         </button>
+                        <button onclick="showSection('admin')" id="adminNavBtn" class="nav-btn border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 px-1 py-4 text-sm font-medium hidden">
+                            Admin
+                        </button>
                     </div>
                     
                     <!-- Search and Quick Actions -->
@@ -936,6 +939,40 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="admin" class="section-content hidden">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Admin</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Gerencie emails restritos e seções que podem visualizar.</p>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cadastrar/Editar</h3>
+                        <div class="space-y-3">
+                            <input id="adminEmailInput" type="email" placeholder="email@dominio.com" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+                            <div>
+                                <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Seções permitidas</p>
+                                <div class="flex flex-wrap gap-3" id="adminSectionsSelect">
+                                    <label class="inline-flex items-center"><input type="checkbox" value="nova-inspecao" class="form-checkbox"><span class="ml-2 text-sm">Nova Inspeção</span></label>
+                                    <label class="inline-flex items-center"><input type="checkbox" value="equipamentos" class="form-checkbox"><span class="ml-2 text-sm">Equipamentos</span></label>
+                                    <label class="inline-flex items-center"><input type="checkbox" value="dashboard" class="form-checkbox"><span class="ml-2 text-sm">Dashboard</span></label>
+                                    <label class="inline-flex items-center"><input type="checkbox" value="historico" class="form-checkbox"><span class="ml-2 text-sm">Histórico</span></label>
+                                    <label class="inline-flex items-center"><input type="checkbox" value="analytics" class="form-checkbox"><span class="ml-2 text-sm">Analytics</span></label>
+                                    <label class="inline-flex items-center"><input type="checkbox" value="relatorios" class="form-checkbox"><span class="ml-2 text-sm">Relatórios</span></label>
+                                </div>
+                            </div>
+                            <div class="flex gap-3">
+                                <button id="adminSaveRuleBtn" class="px-4 py-2 bg-primary text-white rounded-md">Salvar Regra</button>
+                                <button id="adminClearBtn" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300">Limpar</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Emails restritos</h3>
+                        <div id="adminRulesList" class="space-y-2"></div>
                     </div>
                 </div>
             </section>
@@ -1518,7 +1555,7 @@
         let currentPhotoSessionId = null;
         let savingInspection = false;
         let syncingInspections = false;
-        const RESTRICTED_EMAILS = ['santossilvaluizeduardo@gmail.com'];
+        const RESTRICTED_EMAILS = [''];
         function isOnline() { return navigator.onLine; }
         function getOfflineUser() { return { id: 'offline', email: 'Offline' }; }
         function getCachedUser() { try { return JSON.parse(localStorage.getItem('currentUser')); } catch(_) { return null; } }
@@ -2792,11 +2829,12 @@
                 const pm = document.getElementById('profileModal');
                 if (pm) pm.classList.remove('hidden');
             }
-            applyAccessControls();
+            loadAccessControls().then(() => applyAccessControls());
             loadInitialData();
             setupRealtime();
             startPolling();
             if (isRestrictedUser()) { showSection('nova-inspecao'); }
+            if (isAdmin()) { const b = document.getElementById('adminNavBtn'); if (b) b.classList.remove('hidden'); }
         }
 
         // Alternar entre login e cadastro
@@ -3329,13 +3367,14 @@
 
         function showSection(sectionId) {
             if (isRestrictedUser() && !['nova-inspecao','equipamentos'].includes(sectionId)) { showCustomAlert('Acesso restrito.'); sectionId = 'nova-inspecao'; }
+            if (sectionId === 'admin' && !isAdmin()) { showCustomAlert('Acesso restrito.'); sectionId = 'dashboard'; }
             // Update navigation
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('active', 'border-primary', 'text-primary');
                 btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-300');
             });
             const selector = `button[onclick="showSection('${sectionId}')"]`;
-            const activeBtn = document.querySelector(selector);
+            const activeBtn = document.querySelector(selector) || (sectionId === 'admin' ? document.getElementById('adminNavBtn') : null);
             if (activeBtn) {
                 activeBtn.classList.add('active', 'border-primary', 'text-primary');
                 activeBtn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-400', 'dark:hover:text-gray-300');
@@ -3351,6 +3390,7 @@
                 targetSection.classList.remove('hidden');
                 targetSection.classList.add('fade-in');
             }
+            if (sectionId === 'admin') { renderAccessControls(); bindAdminActions(); }
 
             // Reset nova inspeção section
             if (sectionId === 'nova-inspecao') {
@@ -3821,18 +3861,41 @@
             return !!(u && u.email === 'gutemberggg10@gmail.com');
         }
 
+        function getCachedAccessControls() { try { return JSON.parse(localStorage.getItem('accessControls')) || []; } catch(_) { return []; } }
+        function setCachedAccessControls(list) { try { localStorage.setItem('accessControls', JSON.stringify(list)); } catch(_) {} }
+        async function loadAccessControls() {
+            let rules = getCachedAccessControls();
+            if (isOnline()) {
+                try {
+                    const resp = await supabase.from('access_controls').select('*').order('created_at', { ascending: false });
+                    if (!resp.error) { rules = resp.data || rules; setCachedAccessControls(rules); }
+                } catch (_) {}
+            }
+            return rules;
+        }
+        function getAccessRuleFor(email) {
+            const rules = getCachedAccessControls();
+            const e = (email || '').toLowerCase();
+            return rules.find(r => (r.email || '').toLowerCase() === e) || null;
+        }
         function isRestrictedUser() {
             const u = currentUser || getCachedUser();
-            const email = (u && u.email || '').toLowerCase();
-            return RESTRICTED_EMAILS.includes(email);
+            const rule = u ? getAccessRuleFor(u.email) : null;
+            return !!(rule && (rule.role || 'restricted') === 'restricted');
+        }
+        function getAllowedSectionsFor(email) {
+            const rule = getAccessRuleFor(email);
+            return (rule && Array.isArray(rule.allowed_sections) && rule.allowed_sections.length) ? rule.allowed_sections : ['nova-inspecao','equipamentos'];
         }
 
         function applyAccessControls() {
+            const adminBtn = document.getElementById('adminNavBtn');
+            if (adminBtn) { if (isAdmin()) adminBtn.classList.remove('hidden'); else adminBtn.classList.add('hidden'); }
             const restricted = isRestrictedUser();
-            const allow = ['nova-inspecao','equipamentos'];
-            const sections = ['dashboard','historico','analytics','relatorios','nova-inspecao','equipamentos'];
+            const allow = getAllowedSectionsFor((currentUser||getCachedUser()||{}).email || '');
+            const sections = ['dashboard','historico','analytics','relatorios','nova-inspecao','equipamentos','admin'];
             sections.forEach(id => {
-                const btn = document.querySelector(`button[onclick="showSection('${id}')"]`);
+                const btn = id === 'admin' ? document.getElementById('adminNavBtn') : document.querySelector(`button[onclick="showSection('${id}')"]`);
                 if (!btn) return;
                 if (restricted && !allow.includes(id)) { btn.classList.add('hidden'); } else { btn.classList.remove('hidden'); }
             });
@@ -4989,6 +5052,7 @@
                 });
                 printBtn._bound = true;
             }
+            sanitizeStrayNodes();
         });
 
         function openSettings() { 
@@ -5036,6 +5100,79 @@
         setTimeout(() => {
             showFloatingNotification('success', 'Bem-vindo ao Sistema Avançado de Checklist de Manutenção!', 3000);
         }, 1000);
+
+        // Admin access management helpers
+        async function saveAccessRule() {
+            const emailEl = document.getElementById('adminEmailInput');
+            const boxes = Array.from(document.querySelectorAll('#adminSectionsSelect input[type="checkbox"]'));
+            const email = (emailEl?.value || '').trim().toLowerCase();
+            const allowed = boxes.filter(b => b.checked).map(b => b.value);
+            if (!email || allowed.length === 0) { showCustomAlert('Informe o email e selecione pelo menos uma seção.'); return; }
+            const rule = { email, role: 'restricted', allowed_sections: allowed, created_at: new Date().toISOString() };
+            let rules = getCachedAccessControls();
+            const idx = rules.findIndex(r => (r.email||'').toLowerCase() === email);
+            if (idx >= 0) rules[idx] = rule; else rules.unshift(rule);
+            setCachedAccessControls(rules);
+            renderAccessControls();
+            if (isOnline()) {
+                try {
+                    const resp = await supabase.from('access_controls').upsert([rule], { onConflict: 'email' });
+                    if (resp.error) showFloatingNotification('warning', 'Salvo localmente. Tabela access_controls não disponível.'); else showFloatingNotification('success', 'Regra salva');
+                } catch (_) {}
+            }
+            applyAccessControls();
+        }
+
+        async function deleteAccessRule(email) {
+            const e = (email||'').toLowerCase();
+            let rules = getCachedAccessControls();
+            rules = rules.filter(r => (r.email||'').toLowerCase() !== e);
+            setCachedAccessControls(rules);
+            renderAccessControls();
+            if (isOnline()) {
+                try { await supabase.from('access_controls').delete().eq('email', e); } catch (_) {}
+            }
+            applyAccessControls();
+        }
+
+        function renderAccessControls() {
+            const list = getCachedAccessControls();
+            const wrap = document.getElementById('adminRulesList');
+            if (!wrap) return;
+            if (!list.length) { wrap.innerHTML = '<div class="text-sm text-gray-500 dark:text-gray-400">Nenhum email restrito cadastrado</div>'; return; }
+            wrap.innerHTML = list.map(r => `
+                <div class="p-3 border border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-between">
+                    <div>
+                        <div class="text-sm font-medium text-gray-900 dark:text-white">${r.email}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">${(r.allowed_sections||[]).join(', ')}</div>
+                    </div>
+                    <button class="px-3 py-1 text-sm bg-red-600 text-white rounded-md" onclick="deleteAccessRule('${r.email}')">Remover</button>
+                </div>
+            `).join('');
+        }
+
+        function bindAdminActions() {
+            const s = document.getElementById('adminSaveRuleBtn');
+            const c = document.getElementById('adminClearBtn');
+            if (s && !s._bound) { s.addEventListener('click', saveAccessRule); s._bound = true; }
+            if (c && !c._bound) { c.addEventListener('click', function(){ const e=document.getElementById('adminEmailInput'); if(e) e.value=''; Array.from(document.querySelectorAll('#adminSectionsSelect input[type="checkbox"]')).forEach(b=>{ b.checked=false; }); }); c._bound=true; }
+        }
+
+        function sanitizeStrayNodes() {
+            try {
+                const suspicious = [/<!DOCTYPE html/i, /<html/i, /<head>/i, /<style>/i, /\$\{/];
+                const body = document.body;
+                const nodes = Array.from(body.childNodes);
+                nodes.forEach(n => {
+                    if (n.nodeType === Node.TEXT_NODE) {
+                        const t = String(n.textContent || '').trim();
+                        if (t.length > 50 && suspicious.some(rx => rx.test(t))) {
+                            n.remove();
+                        }
+                    }
+                });
+            } catch (_) {}
+        }
     </script>
 </body>
 </html>
