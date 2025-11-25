@@ -1518,6 +1518,7 @@
         let currentPhotoSessionId = null;
         let savingInspection = false;
         let syncingInspections = false;
+        const RESTRICTED_EMAILS = ['santossilvaluizeduardo@gmail.com'];
         function isOnline() { return navigator.onLine; }
         function getOfflineUser() { return { id: 'offline', email: 'Offline' }; }
         function getCachedUser() { try { return JSON.parse(localStorage.getItem('currentUser')); } catch(_) { return null; } }
@@ -2791,9 +2792,11 @@
                 const pm = document.getElementById('profileModal');
                 if (pm) pm.classList.remove('hidden');
             }
+            applyAccessControls();
             loadInitialData();
             setupRealtime();
             startPolling();
+            if (isRestrictedUser()) { showSection('nova-inspecao'); }
         }
 
         // Alternar entre login e cadastro
@@ -3325,6 +3328,7 @@
         }
 
         function showSection(sectionId) {
+            if (isRestrictedUser() && !['nova-inspecao','equipamentos'].includes(sectionId)) { showCustomAlert('Acesso restrito.'); sectionId = 'nova-inspecao'; }
             // Update navigation
             document.querySelectorAll('.nav-btn').forEach(btn => {
                 btn.classList.remove('active', 'border-primary', 'text-primary');
@@ -3817,6 +3821,25 @@
             return !!(u && u.email === 'gutemberggg10@gmail.com');
         }
 
+        function isRestrictedUser() {
+            const u = currentUser || getCachedUser();
+            const email = (u && u.email || '').toLowerCase();
+            return RESTRICTED_EMAILS.includes(email);
+        }
+
+        function applyAccessControls() {
+            const restricted = isRestrictedUser();
+            const allow = ['nova-inspecao','equipamentos'];
+            const sections = ['dashboard','historico','analytics','relatorios','nova-inspecao','equipamentos'];
+            sections.forEach(id => {
+                const btn = document.querySelector(`button[onclick="showSection('${id}')"]`);
+                if (!btn) return;
+                if (restricted && !allow.includes(id)) { btn.classList.add('hidden'); } else { btn.classList.remove('hidden'); }
+            });
+            const search = document.getElementById('globalSearch');
+            if (search) { if (restricted) search.parentElement.classList.add('hidden'); else search.parentElement.classList.remove('hidden'); }
+        }
+
         function openEditInspection(id) {
             if (!isAdmin()) { showCustomAlert('Acesso restrito.'); return; }
             const matchId = String(id);
@@ -3889,6 +3912,7 @@
         }
 
         function viewInspection(id) {
+            if (isRestrictedUser()) { showCustomAlert('Acesso restrito.'); return; }
             const matchId = String(id);
             const inspection = inspections.find(i => String(i.id) === matchId) || inspections.find(i => String(i.local_id) === matchId);
             if (!inspection) return;
@@ -3990,6 +4014,7 @@
         }
 
         function printInspection(id) {
+            if (isRestrictedUser()) { showCustomAlert('Acesso restrito.'); return; }
             const matchId = String(id);
             const inspection = inspections.find(i => String(i.id) === matchId || String(i.local_id) === matchId);
             if (!inspection) { showCustomAlert('Inspeção não encontrada'); return; }
@@ -4011,6 +4036,35 @@
                     <td>${it.note || ''}</td>
                 </tr>
             `).join('');
+            const groups = {};
+            const order = [];
+            normalItems.forEach((it) => {
+                const s = it.section || 'Geral';
+                if (!groups[s]) { groups[s] = []; order.push(s); }
+                groups[s].push(it);
+            });
+            const groupedHtml = order.map((secName) => {
+                const items = groups[secName] || [];
+                const secRows = items.map((it, iidx) => `
+                    <tr>
+                        <td>${iidx+1}</td>
+                        <td>${it.name}</td>
+                        <td>${it.status === 'ok' ? 'OK' : (it.status === 'notok' ? 'NÃO OK' : '')}</td>
+                        <td>${it.note || ''}</td>
+                    </tr>
+                `).join('');
+                const secNote = sectionNotes[secName] ? `<div style="font-size:11px;color:#374151;margin-top:6px;"><strong>Observações:</strong> ${sectionNotes[secName]}</div>` : '';
+                return `
+                    <div class="sec">
+                        <h4>${secName}</h4>
+                        <table>
+                            <thead><tr><th>#</th><th>Item</th><th>Status</th><th>Observação</th></tr></thead>
+                            <tbody>${secRows}</tbody>
+                        </table>
+                        ${secNote}
+                    </div>
+                `;
+            }).join('');
             const photoItems = normalItems.filter(it => Array.isArray(it.photos) && it.photos.length > 0);
             const photosHtml = photoItems.length ? `
                 <div class="sections">
@@ -4078,11 +4132,8 @@
                             <span class="badge nok">${inspection.results.notOk} NÃO OK</span>
                         </div>
                         ${inspection.observacao ? `<div style="font-size:12px;color:#374151;margin-bottom:8px;"><strong>Observação:</strong> ${inspection.observacao}</div>` : ''}
-                        <div class="table-wrap">
-                            <table>
-                                <thead><tr><th>#</th><th>Seção</th><th>Item</th><th>Status</th><th>Observação</th></tr></thead>
-                                <tbody>${rows}</tbody>
-                            </table>
+                        <div class="sections">
+                            ${groupedHtml}
                         </div>
                         ${photosHtml}
                         ${Object.keys(sectionNotes).length > 0 ? `
