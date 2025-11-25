@@ -3128,11 +3128,13 @@
                         updateAnalytics();
                         showFloatingNotification('warning', `Erro ao salvar online: ${error.message}. Salvo offline e será sincronizado.`);
                         clearForm();
+                        backToSelection();
                         return;
                     }
                     await loadInitialData();
                     showModal('successModal');
                     clearForm();
+                    backToSelection();
                     showFloatingNotification('success', 'Inspeção salva com sucesso!');
                 } else {
                     const offlineItem = { ...inspection, offline: true };
@@ -3143,6 +3145,7 @@
                     updateStats();
                     updateAnalytics();
                     clearForm();
+                    backToSelection();
                     const msg = !isOnline() ? 'Sem internet. Inspeção salva offline e será sincronizada.' : 'Usuário não autenticado. Inspeção salva offline e será sincronizada.';
                     showFloatingNotification('warning', msg);
                 }
@@ -3155,6 +3158,7 @@
                 updateAnalytics();
                 showFloatingNotification('warning', 'Falha ao salvar online. Inspeção salva offline e será sincronizada.');
                 clearForm();
+                backToSelection();
             } finally {
                 showLoading(false);
                 savingInspection = false;
@@ -3354,6 +3358,20 @@
             document.getElementById('currentDateTime').textContent = now.toLocaleDateString('pt-BR', options);
         }
 
+        function dateOnlyToLocalDate(s) {
+            const parts = String(s || '').split('-');
+            if (parts.length === 3) return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+            return new Date(s);
+        }
+
+        function formatDateBR(s) {
+            const str = String(s || '');
+            if (str.includes('T')) return new Date(str).toLocaleDateString('pt-BR');
+            const p = str.split('-');
+            if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+            return new Date(str).toLocaleDateString('pt-BR');
+        }
+
         function setCurrentDate() {
             const today = new Date().toISOString().split('T')[0];
             const dateInput = document.getElementById('dataInspecao');
@@ -3429,6 +3447,11 @@
             setCurrentDate();
             clearResults();
             toggleMobileBar(true);
+            const mechEl = document.getElementById('mecanico');
+            if (mechEl) {
+                const u = (typeof currentUser !== 'undefined' && currentUser) || getCachedUser() || getOfflineUser();
+                mechEl.value = getDisplayName(u);
+            }
         }
 
         function generateChecklistItems(type) {
@@ -3634,7 +3657,14 @@
 
         function clearForm() {
             // Clear form inputs
-            document.getElementById('frota').value = '';
+            const frotaSel = document.getElementById('frotaSelect');
+            const frotaCustom = document.getElementById('frotaCustom');
+            if (frotaSel) frotaSel.value = '';
+            if (frotaCustom) { frotaCustom.value = ''; frotaCustom.classList.add('hidden'); }
+            const reforma = document.getElementById('reformaStatus');
+            if (reforma) reforma.value = 'nao';
+            const frotaLegacy = document.getElementById('frota');
+            if (frotaLegacy) frotaLegacy.value = '';
             document.getElementById('mecanico').value = '';
             if (document.getElementById('observacao')) document.getElementById('observacao').value = '';
             setCurrentDate();
@@ -3758,7 +3788,7 @@
                     <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                         <div>
                             <p class="font-medium text-gray-900 dark:text-white">${inspection.frota}</p>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">${inspection.tipo.charAt(0).toUpperCase() + inspection.tipo.slice(1)} - ${new Date(inspection.data).toLocaleDateString('pt-BR')}</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">${inspection.tipo.charAt(0).toUpperCase() + inspection.tipo.slice(1)} - ${formatDateBR(inspection.data)}</p>
                         </div>
                         <div class="text-right">
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${statusColor}-100 text-${statusColor}-800 dark:bg-${statusColor}-900 dark:text-${statusColor}-200">
@@ -3804,7 +3834,7 @@
                 
                 return `
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">${new Date(inspection.data).toLocaleDateString('pt-BR')}</td>
+                        <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">${formatDateBR(inspection.data)}</td>
                         <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">${inspection.tipo.charAt(0).toUpperCase() + inspection.tipo.slice(1)}</td>
                         <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">${inspection.frota}</td>
                         <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">${inspection.mecanico}</td>
@@ -3836,11 +3866,11 @@
             const tipo = document.getElementById('filtroTipo').value;
             const di = document.getElementById('filtroDataInicial').value;
             const df = document.getElementById('filtroDataFinal').value;
-            const diTime = di ? new Date(di).getTime() : null;
-            const dfTime = df ? new Date(df).getTime() : null;
+            const diTime = di ? dateOnlyToLocalDate(di).getTime() : null;
+            const dfTime = df ? dateOnlyToLocalDate(df).getTime() : null;
             const filtered = inspections.filter(i => {
                 const matchesTipo = !tipo || i.tipo === tipo;
-                const t = new Date(i.data).getTime();
+                const t = dateOnlyToLocalDate(i.data).getTime();
                 const afterStart = diTime == null || t >= diTime;
                 const beforeEnd = dfTime == null || t <= dfTime;
                 return matchesTipo && afterStart && beforeEnd;
@@ -3987,7 +4017,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <p class="text-sm text-gray-500 dark:text-gray-400">Data</p>
-                        <p class="font-medium text-gray-900 dark:text-white">${new Date(inspection.data).toLocaleDateString('pt-BR')}</p>
+                        <p class="font-medium text-gray-900 dark:text-white">${formatDateBR(inspection.data)}</p>
                     </div>
                     <div>
                         <p class="text-sm text-gray-500 dark:text-gray-400">Equipamento</p>
@@ -4181,7 +4211,7 @@
                 </head><body onload="window.print()">
                     <div class="container">
                         <div class="header">
-                            <div class="brand"><div class="logo">GG</div><div><div class="title">GGOMES-LOG • Checklist</div><div class="subtitle">${new Date(inspection.data).toLocaleDateString('pt-BR')}</div></div></div>
+                            <div class="brand"><div class="logo">GG</div><div><div class="title">GGOMES-LOG • Checklist</div><div class="subtitle">${formatDateBR(inspection.data)}</div></div></div>
                             <div class="subtitle">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
                         </div>
                         <div class="info">
@@ -4511,7 +4541,7 @@
             const eqFilter = eqSel ? eqSel.value : 'all';
             const ldFilter = ldSel ? ldSel.value : 'all';
             const filtered = inspections.filter(i => {
-                const d = new Date(i.data);
+                const d = dateOnlyToLocalDate(i.data);
                 const inRange = d >= start && d <= end;
                 const byEq = eqFilter === 'all' ? true : i.tipo === eqFilter;
                 const byLd = ldFilter === 'all' ? true : (i.mecanico || '') === ldFilter;
@@ -4519,12 +4549,12 @@
             });
             const byDay = {};
             filtered.forEach(i => {
-                const k = new Date(i.data).toISOString().split('T')[0];
+                const k = String(i.data);
                 if (!byDay[k]) byDay[k] = [];
                 byDay[k].push(i.results?.percentage || 0);
             });
-            const labels = Object.keys(byDay).sort((a,b)=>new Date(a)-new Date(b)).map(d=>new Date(d).toLocaleDateString('pt-BR'));
-            const data = Object.keys(byDay).sort((a,b)=>new Date(a)-new Date(b)).map(d=>{
+            const labels = Object.keys(byDay).sort((a,b)=>dateOnlyToLocalDate(a)-dateOnlyToLocalDate(b)).map(d=>formatDateBR(d));
+            const data = Object.keys(byDay).sort((a,b)=>dateOnlyToLocalDate(a)-dateOnlyToLocalDate(b)).map(d=>{
                 const arr = byDay[d];
                 const avg = arr.length ? Math.round(arr.reduce((s,v)=>s+v,0)/arr.length) : 0;
                 return avg;
@@ -4733,7 +4763,7 @@
             if (!ctx || typeof Chart === 'undefined') return;
             const last = inspections.slice(-7);
             const data = last.map(i => i.results?.percentage || 0);
-            const labels = last.map(i => new Date(i.data).toLocaleDateString('pt-BR'));
+            const labels = last.map(i => formatDateBR(i.data));
             if (!sparklineChart) {
                 sparklineChart = new Chart(ctx, {
                     type: 'line',
@@ -4771,7 +4801,7 @@
                     containerIssues.innerHTML = crit.map(i => {
                         const color = (i.results?.percentage||0) < 60 ? 'red' : 'yellow';
                         const nots = i.results?.notOk||0;
-                        const when = i.created_at ? new Date(i.created_at).toLocaleString('pt-BR') : new Date(i.data).toLocaleDateString('pt-BR');
+                        const when = i.created_at ? new Date(i.created_at).toLocaleString('pt-BR') : formatDateBR(i.data);
                         return `
                             <div class="flex items-start space-x-3 p-4 bg-${color}-50 dark:bg-${color}-900/20 rounded-lg">
                                 <div class="flex-shrink-0">
@@ -4836,7 +4866,7 @@
             const start = new Date();
             start.setDate(end.getDate() - days + 1);
             const filtered = inspections.filter(i => {
-                const d = new Date(i.data);
+                const d = dateOnlyToLocalDate(i.data);
                 return d >= start && d <= end;
             });
             const total = filtered.length;
@@ -4918,7 +4948,7 @@
             } else if (format === 'pdf') {
                 const rows = filtered.map(i => `
                     <tr>
-                        <td>${new Date(i.data).toLocaleDateString('pt-BR')}</td>
+                        <td>${formatDateBR(i.data)}</td>
                         <td>${i.tipo}</td>
                         <td>${i.frota}</td>
                         <td>${i.mecanico}</td>
