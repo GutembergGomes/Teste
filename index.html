@@ -3975,6 +3975,20 @@
                     <td>${it.note || ''}</td>
                 </tr>
             `).join('');
+            const photoItems = normalItems.filter(it => Array.isArray(it.photos) && it.photos.length > 0);
+            const photosHtml = photoItems.length ? `
+                <div class="sections">
+                    <h3 style="font-size:13px;margin:14px 0 8px;">Fotos dos Itens</h3>
+                    ${photoItems.map((it) => `
+                        <div class="sec">
+                            <h4>${it.section || ''} • ${it.name}</h4>
+                            <div class="photo-grid">
+                                ${it.photos.map(p => `<img src='${p}' />`).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
             const doc = `
                 <html><head>
                     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -4004,8 +4018,10 @@
                         th, td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 11px; word-break: break-word; }
                         tbody tr:nth-child(odd) { background: #fafafa; }
                         .sections { margin-top: 14px; }
-                        .sec { margin-top: 10px; }
+                        .sec { margin-top: 10px; page-break-inside: avoid; }
                         .sec h4 { font-size: 12px; margin: 0 0 6px; color:#374151; }
+                        .photo-grid { display:flex; flex-wrap:wrap; gap:8px; }
+                        .photo-grid img { width: 120px; height: 90px; object-fit: cover; border:1px solid #e5e7eb; border-radius:6px; }
                         .footer { margin-top: 18px; font-size: 11px; color:#6B7280; text-align:right; }
                         @media screen { body { background:#f3f4f6; } .container { background:#fff; padding:24px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); } }
                     </style>
@@ -4032,6 +4048,7 @@
                                 <tbody>${rows}</tbody>
                             </table>
                         </div>
+                        ${photosHtml}
                         ${Object.keys(sectionNotes).length > 0 ? `
                         <div class="sections">
                             <h3 style="font-size:13px;margin:10px 0;">Observações por Seção</h3>
